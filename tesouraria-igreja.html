@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tesouraria — Igreja</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --green: #1D9E75; --green-dark: #0F6E56; --green-light: #E1F5EE;
+      --red: #E24B4A; --red-light: #FCEBEB;
+      --blue-light: #E6F1FB; --amber-light: #FAEEDA;
+      --bg: #f7f6f3; --surface: #ffffff;
+      --border: rgba(0,0,0,0.1); --border-md: rgba(0,0,0,0.18);
+      --text: #1a1a18; --text-muted: #6b6b67; --text-faint: #9b9b97;
+      --radius: 10px; --radius-lg: 14px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1a18; --surface: #242422;
+        --border: rgba(255,255,255,0.1); --border-md: rgba(255,255,255,0.18);
+        --text: #f0efe8; --text-muted: #a0a09a; --text-faint: #6a6a66;
+        --green-light: #04342C; --red-light: #501313;
+        --blue-light: #042C53; --amber-light: #412402;
+      }
+    }
+    body { font-family: 'Georgia', serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ── AUTH SCREEN ── */
+    .auth-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .auth-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 36px 32px; width: 100%; max-width: 380px; }
+    .auth-logo { font-size: 22px; margin-bottom: 6px; }
+    .auth-logo span { color: var(--green); }
+    .auth-sub { font-size: 13px; font-family: monospace; color: var(--text-muted); margin-bottom: 28px; }
+    .auth-tabs { display: flex; gap: 0; margin-bottom: 24px; border-bottom: 0.5px solid var(--border); }
+    .auth-tab { padding: 8px 16px; font-size: 13px; font-family: monospace; color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -0.5px; background: none; border-top: none; border-left: none; border-right: none; }
+    .auth-tab.active { color: var(--green); border-bottom-color: var(--green); }
+    .auth-msg { font-size: 13px; font-family: monospace; padding: 10px 14px; border-radius: var(--radius); margin-bottom: 16px; display: none; }
+    .auth-msg.erro { background: var(--red-light); color: #A32D2D; display: block; }
+    .auth-msg.ok { background: var(--green-light); color: var(--green-dark); display: block; }
+
+    /* ── APP ── */
+    .app { max-width: 920px; margin: 0 auto; padding: 24px 16px; }
+    .header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 28px; flex-wrap: wrap; gap: 12px; }
+    .header-title { font-size: 26px; font-weight: normal; letter-spacing: -0.5px; }
+    .header-title span { color: var(--green); }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .user-badge { font-size: 12px; font-family: monospace; color: var(--text-muted); }
+    .tabs { display: flex; gap: 4px; margin-bottom: 24px; background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 4px; width: fit-content; }
+    .tab { padding: 7px 18px; font-size: 13px; font-family: monospace; color: var(--text-muted); cursor: pointer; border-radius: 7px; border: none; background: none; transition: all 0.15s; }
+    .tab.active { background: var(--green); color: #fff; }
+    .tab:hover:not(.active) { color: var(--text); background: var(--bg); }
+
+    .card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 16px; }
+    .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+    .metric { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+    .metric-label { font-size: 11px; font-family: monospace; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    .metric-value { font-size: 22px; font-weight: normal; }
+    .metric-value.verde { color: var(--green); }
+    .metric-value.vermelho { color: var(--red); }
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .section-title { font-size: 15px; }
+
+    .btn { padding: 8px 16px; font-size: 13px; font-family: monospace; border: 0.5px solid var(--border-md); border-radius: var(--radius); cursor: pointer; background: var(--surface); color: var(--text); transition: all 0.15s; }
+    .btn:hover { background: var(--bg); }
+    .btn-primary { background: var(--green); color: #fff; border-color: var(--green); }
+    .btn-primary:hover { background: var(--green-dark); border-color: var(--green-dark); }
+    .btn-danger { background: none; color: var(--red); border-color: var(--red); }
+    .btn-danger:hover { background: var(--red-light); }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-full { width: 100%; justify-content: center; display: block; text-align: center; }
+
+    .form-row { display: grid; gap: 12px; margin-bottom: 12px; }
+    .form-2 { grid-template-columns: 1fr 1fr; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    label { font-size: 11px; font-family: monospace; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    input, select { font-size: 13px; padding: 8px 10px; border: 0.5px solid var(--border-md); border-radius: var(--radius); background: var(--bg); color: var(--text); width: 100%; font-family: monospace; }
+    input:focus, select:focus { outline: none; border-color: var(--green); }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; font-size: 13px; border-collapse: collapse; font-family: monospace; }
+    th { text-align: left; font-size: 11px; color: var(--text-muted); padding: 6px 10px; border-bottom: 0.5px solid var(--border); font-weight: normal; text-transform: uppercase; letter-spacing: 0.05em; }
+    td { padding: 10px 10px; border-bottom: 0.5px solid var(--border); color: var(--text); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg); }
+    .valor-entrada { color: var(--green); }
+    .valor-saida { color: var(--red); }
+
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-family: monospace; }
+    .tag-receita { background: var(--green-light); color: var(--green-dark); }
+    .tag-despesa { background: var(--red-light); color: #A32D2D; }
+    .tag-ativo { background: var(--blue-light); color: #185FA5; }
+    .tag-passivo { background: var(--amber-light); color: #854F0B; }
+
+    .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .bar-label { font-size: 12px; font-family: monospace; color: var(--text-muted); width: 130px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bar-track { flex: 1; background: var(--bg); border-radius: 4px; height: 16px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
+    .bar-val { font-size: 12px; font-family: monospace; color: var(--text-muted); min-width: 90px; text-align: right; }
+
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center; padding: 16px; }
+    .overlay.open { display: flex; }
+    .modal { background: var(--surface); border-radius: var(--radius-lg); border: 0.5px solid var(--border-md); padding: 24px; width: 460px; max-width: 100%; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .modal-title { font-size: 16px; }
+    .close-btn { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-muted); line-height: 1; }
+    .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+    .toast { position: fixed; bottom: 24px; right: 24px; background: var(--text); color: var(--surface); padding: 12px 20px; border-radius: var(--radius); font-size: 13px; font-family: monospace; z-index: 200; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+    .toast.show { opacity: 1; }
+    .toast.erro { background: var(--red); color: #fff; }
+
+    .empty { text-align: center; padding: 40px; color: var(--text-faint); font-size: 13px; font-family: monospace; }
+    .loading { text-align: center; padding: 30px; color: var(--text-muted); font-size: 13px; font-family: monospace; }
+
+    @media (max-width: 600px) {
+      .metric-grid { grid-template-columns: 1fr; }
+      .form-2 { grid-template-columns: 1fr; }
+      .header { flex-direction: column; align-items: flex-start; }
+      .auth-card { padding: 28px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── TELA DE AUTH ── -->
+<div class="auth-wrap" id="screen-auth">
+  <div class="auth-card">
+    <div class="auth-logo">Teso<span>uraria</span></div>
+    <div class="auth-sub">Gestão financeira da igreja</div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')">Entrar</button>
+      <button class="auth-tab" onclick="switchAuthTab('senha')">Esqueci a senha</button>
+    </div>
+
+    <div id="auth-msg" class="auth-msg"></div>
+
+    <!-- LOGIN -->
+    <div id="form-login">
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="seu@email.com" />
+      </div>
+      <div class="form-group" style="margin-bottom:20px;">
+        <label>Senha</label>
+        <input type="password" id="login-senha" placeholder="••••••••" onkeydown="if(event.key==='Enter')fazerLogin()" />
+      </div>
+      <button class="btn btn-primary btn-full" id="btn-login" onclick="fazerLogin()">Entrar</button>
+      <p style="font-size:12px;font-family:monospace;color:var(--text-faint);text-align:center;margin-top:16px;">
+        Acesso somente por convite do administrador
+      </p>
+    </div>
+
+    <!-- ESQUECI SENHA -->
+    <div id="form-senha" style="display:none;">
+      <div class="form-group" style="margin-bottom:20px;">
+        <label>Email cadastrado</label>
+        <input type="email" id="reset-email" placeholder="seu@email.com" />
+      </div>
+      <button class="btn btn-primary btn-full" id="btn-reset" onclick="enviarReset()">Enviar link de redefinição</button>
+    </div>
+
+    <!-- DEFINIR NOVA SENHA (após clicar no link do email) -->
+    <div id="form-nova-senha" style="display:none;">
+      <p style="font-size:13px;font-family:monospace;color:var(--text-muted);margin-bottom:16px;">Defina sua nova senha para acessar o sistema.</p>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Nova senha</label>
+        <input type="password" id="nova-senha" placeholder="Mínimo 6 caracteres" />
+      </div>
+      <div class="form-group" style="margin-bottom:20px;">
+        <label>Confirmar senha</label>
+        <input type="password" id="nova-senha-conf" placeholder="Repita a senha" />
+      </div>
+      <button class="btn btn-primary btn-full" id="btn-nova-senha" onclick="salvarNovaSenha()">Salvar nova senha</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TELA PRINCIPAL ── -->
+<div class="app" id="screen-app" style="display:none;">
+  <div class="header">
+    <div>
+      <div class="header-title">Teso<span>uraria</span></div>
+    </div>
+    <div class="header-right">
+      <span class="user-badge" id="user-email"></span>
+      <button class="btn btn-sm" onclick="sair()">Sair</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('dashboard')">Dashboard</button>
+    <button class="tab" onclick="showTab('plano')">Plano de contas</button>
+    <button class="tab" onclick="showTab('lancamentos')">Lançamentos</button>
+    <button class="tab" onclick="showTab('membros')">Membros</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="tab-dashboard">
+    <div class="metric-grid">
+      <div class="metric"><div class="metric-label">Saldo atual</div><div class="metric-value verde" id="d-saldo">—</div></div>
+      <div class="metric"><div class="metric-label">Total entradas</div><div class="metric-value verde" id="d-entradas">—</div></div>
+      <div class="metric"><div class="metric-label">Total saídas</div><div class="metric-value vermelho" id="d-saidas">—</div></div>
+    </div>
+    <div class="card">
+      <div class="section-title" style="margin-bottom:14px;">Entradas por conta</div>
+      <div id="chart-e"><div class="empty">Nenhum lançamento ainda</div></div>
+    </div>
+    <div class="card">
+      <div class="section-title" style="margin-bottom:14px;">Saídas por conta</div>
+      <div id="chart-s"><div class="empty">Nenhum lançamento ainda</div></div>
+    </div>
+    <div class="card">
+      <div class="section-title" style="margin-bottom:14px;">Últimos lançamentos</div>
+      <div id="d-recentes"><div class="loading">Carregando...</div></div>
+    </div>
+  </div>
+
+  <!-- PLANO DE CONTAS -->
+  <div id="tab-plano" style="display:none;">
+    <div class="section-header">
+      <span class="section-title">Contas cadastradas</span>
+      <button class="btn btn-primary" onclick="abrirModalConta()">+ Nova conta</button>
+    </div>
+    <div id="lista-contas"><div class="loading">Carregando...</div></div>
+  </div>
+
+  <!-- LANÇAMENTOS -->
+  <div id="tab-lancamentos" style="display:none;">
+    <div class="section-header">
+      <span class="section-title">Movimentações</span>
+      <button class="btn btn-primary" onclick="abrirModalLanc()">+ Novo lançamento</button>
+    </div>
+    <div id="lista-lanc"><div class="loading">Carregando...</div></div>
+  </div>
+
+  <!-- MEMBROS -->
+  <div id="tab-membros" style="display:none;">
+    <div class="section-header">
+      <span class="section-title">Membros com acesso</span>
+      <button class="btn btn-primary" onclick="abrirModalConvite()">+ Convidar membro</button>
+    </div>
+    <div class="card">
+      <p style="font-size:13px;font-family:monospace;color:var(--text-muted);margin-bottom:0;">
+        O membro receberá um email com link para criar a senha e acessar o sistema. O convite expira em 24 horas.
+      </p>
+    </div>
+    <div id="lista-membros"><div class="loading">Carregando...</div></div>
+  </div>
+</div>
+
+<!-- MODAL CONTA -->
+<div class="overlay" id="modal-conta">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Nova conta</span>
+      <button class="close-btn" onclick="fecharModal('modal-conta')">×</button>
+    </div>
+    <div class="form-row"><div class="form-group"><label>Nome da conta</label><input id="c-nome" placeholder="Ex: Dízimos" /></div></div>
+    <div class="form-row form-2">
+      <div class="form-group"><label>Tipo</label>
+        <select id="c-tipo"><option>Receita</option><option>Despesa</option><option>Ativo</option><option>Passivo</option></select>
+      </div>
+      <div class="form-group"><label>Código (opcional)</label><input id="c-codigo" placeholder="Ex: 1.1" /></div>
+    </div>
+    <div class="form-row"><div class="form-group"><label>Descrição (opcional)</label><input id="c-desc" placeholder="Descrição da conta" /></div></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="fecharModal('modal-conta')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-salvar-conta" onclick="salvarConta()">Salvar conta</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL LANÇAMENTO -->
+<div class="overlay" id="modal-lanc">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Novo lançamento</span>
+      <button class="close-btn" onclick="fecharModal('modal-lanc')">×</button>
+    </div>
+    <div class="form-row form-2">
+      <div class="form-group"><label>Tipo</label>
+        <select id="l-tipo" onchange="filtrarContas()"><option>Entrada</option><option>Saída</option></select>
+      </div>
+      <div class="form-group"><label>Data</label><input type="date" id="l-data" /></div>
+    </div>
+    <div class="form-row"><div class="form-group"><label>Descrição / histórico</label><input id="l-desc" placeholder="Ex: Oferta do culto dominical" /></div></div>
+    <div class="form-row form-2">
+      <div class="form-group"><label>Valor (R$)</label><input type="number" id="l-valor" placeholder="0.00" min="0" step="0.01" /></div>
+      <div class="form-group"><label>Conta</label><select id="l-conta"></select></div>
+    </div>
+    <div class="form-row form-2">
+      <div class="form-group"><label>Forma de pagamento</label>
+        <select id="l-pgto"><option>Dinheiro</option><option>PIX</option><option>Transferência</option><option>Cheque</option><option>Cartão</option></select>
+      </div>
+      <div class="form-group"><label>Responsável</label><input id="l-resp" placeholder="Nome" /></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="fecharModal('modal-lanc')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-salvar-lanc" onclick="salvarLanc()">Salvar lançamento</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CONVITE -->
+<div class="overlay" id="modal-convite">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Convidar membro</span>
+      <button class="close-btn" onclick="fecharModal('modal-convite')">×</button>
+    </div>
+    <p style="font-size:13px;font-family:monospace;color:var(--text-muted);margin-bottom:16px;">O membro receberá um email com link para criar sua senha e acessar o sistema.</p>
+    <div class="form-row">
+      <div class="form-group"><label>Nome completo</label><input id="conv-nome" placeholder="Nome do membro" /></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Email</label><input type="email" id="conv-email" placeholder="email@dominio.com" /></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="fecharModal('modal-convite')">Cancelar</button>
+      <button class="btn btn-primary" id="btn-convidar" onclick="convidarMembro()">Enviar convite</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://emwpzfrrvqssjwijlifa.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_lFCBRYm0tpbvK9wfwFbxcA_AuV5Nbpr';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let contas = [], lancamentos = [], usuarioAtual = null;
+
+// ── Utilitários ───────────────────────────────────────────────
+function fmtBRL(v) { return 'R$ ' + Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtData(s) { return s ? s.split('-').reverse().join('/') : '—'; }
+function toast(msg, erro=false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (erro?' erro':'');
+  setTimeout(()=>el.className='toast', 3500);
+}
+function authMsg(msg, tipo='erro') {
+  const el = document.getElementById('auth-msg');
+  el.textContent = msg;
+  el.className = 'auth-msg ' + tipo;
+}
+function fecharModal(id) { document.getElementById(id).classList.remove('open'); }
+function tagTipo(tipo) {
+  const m={Receita:'tag-receita',Despesa:'tag-despesa',Ativo:'tag-ativo',Passivo:'tag-passivo'};
+  return `<span class="tag ${m[tipo]||''}">${tipo}</span>`;
+}
+
+// ── Auth tabs ─────────────────────────────────────────────────
+function switchAuthTab(tab) {
+  document.getElementById('auth-msg').className = 'auth-msg';
+  document.querySelectorAll('.auth-tab').forEach((el,i)=>el.classList.toggle('active',['login','senha'][i]===tab));
+  document.getElementById('form-login').style.display = tab==='login'?'block':'none';
+  document.getElementById('form-senha').style.display = tab==='senha'?'block':'none';
+  document.getElementById('form-nova-senha').style.display = 'none';
+}
+
+// ── Detectar link de reset/convite ────────────────────────────
+async function verificarHash() {
+  const hash = window.location.hash;
+  if(hash.includes('type=recovery') || hash.includes('type=invite')) {
+    const { data, error } = await sb.auth.getSession();
+    if(data.session) {
+      document.querySelectorAll('.auth-tab').forEach(el=>el.style.display='none');
+      document.getElementById('form-login').style.display='none';
+      document.getElementById('form-senha').style.display='none';
+      document.getElementById('form-nova-senha').style.display='block';
+      authMsg('Defina sua senha para acessar o sistema.', 'ok');
+    }
+  }
+}
+
+// ── Login ─────────────────────────────────────────────────────
+async function fazerLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const senha = document.getElementById('login-senha').value;
+  if(!email||!senha) { authMsg('Preencha email e senha.'); return; }
+  const btn = document.getElementById('btn-login');
+  btn.disabled=true; btn.textContent='Entrando...';
+  const {data, error} = await sb.auth.signInWithPassword({email, password: senha});
+  btn.disabled=false; btn.textContent='Entrar';
+  if(error) { authMsg('Email ou senha incorretos.'); return; }
+  entrarNoApp(data.user);
+}
+
+// ── Reset de senha ────────────────────────────────────────────
+async function enviarReset() {
+  const email = document.getElementById('reset-email').value.trim();
+  if(!email) { authMsg('Informe seu email.'); return; }
+  const btn = document.getElementById('btn-reset');
+  btn.disabled=true; btn.textContent='Enviando...';
+  const {error} = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.href
+  });
+  btn.disabled=false; btn.textContent='Enviar link de redefinição';
+  if(error) { authMsg('Erro ao enviar email: '+error.message); return; }
+  authMsg('Link enviado! Verifique seu email.', 'ok');
+}
+
+// ── Nova senha (após convite ou reset) ────────────────────────
+async function salvarNovaSenha() {
+  const s1 = document.getElementById('nova-senha').value;
+  const s2 = document.getElementById('nova-senha-conf').value;
+  if(s1.length < 6) { authMsg('A senha deve ter no mínimo 6 caracteres.'); return; }
+  if(s1 !== s2) { authMsg('As senhas não coincidem.'); return; }
+  const btn = document.getElementById('btn-nova-senha');
+  btn.disabled=true; btn.textContent='Salvando...';
+  const {data, error} = await sb.auth.updateUser({password: s1});
+  btn.disabled=false; btn.textContent='Salvar nova senha';
+  if(error) { authMsg('Erro: '+error.message); return; }
+  entrarNoApp(data.user);
+}
+
+// ── Sair ──────────────────────────────────────────────────────
+async function sair() {
+  await sb.auth.signOut();
+  usuarioAtual = null;
+  document.getElementById('screen-app').style.display='none';
+  document.getElementById('screen-auth').style.display='flex';
+  switchAuthTab('login');
+}
+
+// ── Entrar no app ─────────────────────────────────────────────
+async function entrarNoApp(user) {
+  usuarioAtual = user;
+  window.location.hash = '';
+  document.getElementById('screen-auth').style.display='none';
+  document.getElementById('screen-app').style.display='block';
+  document.getElementById('user-email').textContent = user.email;
+  await Promise.all([carregarContas(), carregarLanc()]);
+  renderDashboard();
+}
+
+// ── Sessão persistente ────────────────────────────────────────
+sb.auth.onAuthStateChange((event, session) => {
+  if(event === 'SIGNED_IN' && session && !usuarioAtual) {
+    if(window.location.hash.includes('type=')) return;
+    entrarNoApp(session.user);
+  }
+});
+
+// ── Dados ─────────────────────────────────────────────────────
+async function carregarContas() {
+  const {data} = await sb.from('contas').select('*').order('tipo').order('nome');
+  contas = data || [];
+}
+async function carregarLanc() {
+  const {data} = await sb.from('lancamentos').select('*').order('data',{ascending:false});
+  lancamentos = data || [];
+}
+
+// ── Tabs ──────────────────────────────────────────────────────
+function showTab(tab) {
+  ['dashboard','plano','lancamentos','membros'].forEach(t=>{
+    document.getElementById('tab-'+t).style.display = t===tab?'block':'none';
+  });
+  document.querySelectorAll('.tab').forEach((el,i)=>{
+    el.classList.toggle('active',['dashboard','plano','lancamentos','membros'][i]===tab);
+  });
+  if(tab==='dashboard') renderDashboard();
+  if(tab==='plano') renderContas();
+  if(tab==='lancamentos') { filtrarContas(); renderLanc(); }
+  if(tab==='membros') renderMembros();
+}
+
+// ── Plano de contas ───────────────────────────────────────────
+function abrirModalConta() {
+  ['c-nome','c-codigo','c-desc'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('c-tipo').value='Receita';
+  document.getElementById('modal-conta').classList.add('open');
+}
+async function salvarConta() {
+  const nome = document.getElementById('c-nome').value.trim();
+  if(!nome) { toast('Informe o nome da conta', true); return; }
+  const btn = document.getElementById('btn-salvar-conta');
+  btn.disabled=true; btn.textContent='Salvando...';
+  const {error} = await sb.from('contas').insert([{
+    nome, tipo: document.getElementById('c-tipo').value,
+    codigo: document.getElementById('c-codigo').value.trim()||null,
+    descricao: document.getElementById('c-desc').value.trim()||null
+  }]);
+  btn.disabled=false; btn.textContent='Salvar conta';
+  if(error) { toast('Erro: '+error.message, true); return; }
+  toast('Conta salva!');
+  fecharModal('modal-conta');
+  await carregarContas(); renderContas();
+}
+async function removerConta(id) {
+  if(!confirm('Remover esta conta?')) return;
+  const {error} = await sb.from('contas').delete().eq('id',id);
+  if(error) { toast('Erro ao remover', true); return; }
+  toast('Conta removida');
+  await carregarContas(); renderContas();
+}
+function renderContas() {
+  const el = document.getElementById('lista-contas');
+  if(!contas.length) { el.innerHTML='<div class="empty">Nenhuma conta cadastrada.</div>'; return; }
+  const grupos = {Receita:[],Despesa:[],Ativo:[],Passivo:[]};
+  contas.forEach(c=>(grupos[c.tipo]||[]).push(c));
+  let html='';
+  Object.entries(grupos).forEach(([tipo,lista])=>{
+    if(!lista.length) return;
+    html+=`<div class="card"><div style="font-size:11px;font-family:monospace;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">${tipo}s</div>`;
+    html+='<div class="table-wrap"><table><thead><tr><th>Código</th><th>Nome</th><th>Tipo</th><th>Descrição</th><th></th></tr></thead><tbody>';
+    lista.forEach(c=>{
+      html+=`<tr><td style="color:var(--text-muted)">${c.codigo||'—'}</td><td>${c.nome}</td><td>${tagTipo(c.tipo)}</td><td style="color:var(--text-muted)">${c.descricao||'—'}</td><td><button class="btn btn-sm" onclick="removerConta(${c.id})">Remover</button></td></tr>`;
+    });
+    html+='</tbody></table></div></div>';
+  });
+  el.innerHTML=html;
+}
+
+// ── Lançamentos ───────────────────────────────────────────────
+function filtrarContas() {
+  const tipo = document.getElementById('l-tipo').value;
+  const validos = tipo==='Entrada'?['Receita','Ativo']:['Despesa','Passivo'];
+  const sel = document.getElementById('l-conta');
+  const filtradas = contas.filter(c=>validos.includes(c.tipo));
+  sel.innerHTML = filtradas.length
+    ? filtradas.map(c=>`<option value="${c.id}">${c.nome}</option>`).join('')
+    : '<option value="">— Cadastre contas primeiro —</option>';
+}
+function abrirModalLanc() {
+  document.getElementById('l-data').value = new Date().toISOString().slice(0,10);
+  ['l-desc','l-valor','l-resp'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('l-tipo').value='Entrada';
+  filtrarContas();
+  document.getElementById('modal-lanc').classList.add('open');
+}
+async function salvarLanc() {
+  const desc = document.getElementById('l-desc').value.trim();
+  const valor = parseFloat(document.getElementById('l-valor').value);
+  const data = document.getElementById('l-data').value;
+  if(!desc||!valor||!data) { toast('Preencha data, descrição e valor', true); return; }
+  const contaId = document.getElementById('l-conta').value;
+  const conta = contas.find(c=>c.id==contaId);
+  const btn = document.getElementById('btn-salvar-lanc');
+  btn.disabled=true; btn.textContent='Salvando...';
+  const {error} = await sb.from('lancamentos').insert([{
+    tipo: document.getElementById('l-tipo').value, data, descricao: desc, valor,
+    conta_nome: conta?conta.nome:'—',
+    pagamento: document.getElementById('l-pgto').value,
+    responsavel: document.getElementById('l-resp').value.trim()||null
+  }]);
+  btn.disabled=false; btn.textContent='Salvar lançamento';
+  if(error) { toast('Erro: '+error.message, true); return; }
+  toast('Lançamento salvo!');
+  fecharModal('modal-lanc');
+  await carregarLanc(); renderLanc(); renderDashboard();
+}
+async function removerLanc(id) {
+  if(!confirm('Remover este lançamento?')) return;
+  const {error} = await sb.from('lancamentos').delete().eq('id',id);
+  if(error) { toast('Erro ao remover', true); return; }
+  toast('Lançamento removido');
+  await carregarLanc(); renderLanc(); renderDashboard();
+}
+function renderLanc() {
+  const el = document.getElementById('lista-lanc');
+  if(!lancamentos.length) { el.innerHTML='<div class="empty">Nenhum lançamento ainda.</div>'; return; }
+  let html='<div class="card"><div class="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th>Forma</th><th>Responsável</th><th style="text-align:right">Valor</th><th></th></tr></thead><tbody>';
+  lancamentos.forEach(l=>{
+    const cls=l.tipo==='Entrada'?'valor-entrada':'valor-saida';
+    const sinal=l.tipo==='Entrada'?'+':'−';
+    html+=`<tr><td style="color:var(--text-muted)">${fmtData(l.data)}</td><td>${l.descricao}</td><td><span class="tag ${l.tipo==='Entrada'?'tag-receita':'tag-despesa'}">${l.conta_nome}</span></td><td style="color:var(--text-muted)">${l.pagamento||'—'}</td><td style="color:var(--text-muted)">${l.responsavel||'—'}</td><td class="${cls}" style="text-align:right">${sinal} ${fmtBRL(l.valor)}</td><td><button class="btn btn-sm" onclick="removerLanc(${l.id})">Remover</button></td></tr>`;
+  });
+  html+='</tbody></table></div></div>';
+  el.innerHTML=html;
+}
+
+// ── Membros / Convites ────────────────────────────────────────
+function abrirModalConvite() {
+  document.getElementById('conv-nome').value='';
+  document.getElementById('conv-email').value='';
+  document.getElementById('modal-convite').classList.add('open');
+}
+async function convidarMembro() {
+  const email = document.getElementById('conv-email').value.trim();
+  const nome = document.getElementById('conv-nome').value.trim();
+  if(!email||!nome) { toast('Preencha nome e email', true); return; }
+  const btn = document.getElementById('btn-convidar');
+  btn.disabled=true; btn.textContent='Enviando...';
+  const {error} = await sb.auth.admin.inviteUserByEmail(email, {
+    data: { nome_completo: nome },
+    redirectTo: window.location.href
+  });
+  btn.disabled=false; btn.textContent='Enviar convite';
+  if(error) { toast('Erro ao convidar: '+error.message, true); return; }
+  toast('Convite enviado para '+email+'!');
+  fecharModal('modal-convite');
+  await renderMembros();
+}
+async function renderMembros() {
+  const el = document.getElementById('lista-membros');
+  el.innerHTML='<div class="loading">Carregando...</div>';
+  const {data, error} = await sb.auth.admin.listUsers();
+  if(error) {
+    el.innerHTML='<div class="empty">Não foi possível carregar os membros.<br><span style="font-size:11px">Disponível apenas para administradores.</span></div>';
+    return;
+  }
+  const users = data.users || [];
+  if(!users.length) { el.innerHTML='<div class="empty">Nenhum membro cadastrado ainda.</div>'; return; }
+  let html='<div class="card"><div class="table-wrap"><table><thead><tr><th>Nome</th><th>Email</th><th>Cadastrado em</th><th>Último acesso</th></tr></thead><tbody>';
+  users.forEach(u=>{
+    const nome = u.user_metadata?.nome_completo || u.user_metadata?.full_name || '—';
+    const criado = u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '—';
+    const ultimo = u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString('pt-BR') : 'Nunca acessou';
+    html+=`<tr><td>${nome}</td><td style="color:var(--text-muted)">${u.email}</td><td style="color:var(--text-muted)">${criado}</td><td style="color:var(--text-muted)">${ultimo}</td></tr>`;
+  });
+  html+='</tbody></table></div></div>';
+  el.innerHTML=html;
+}
+
+// ── Dashboard ─────────────────────────────────────────────────
+function renderDashboard() {
+  const entradas = lancamentos.filter(l=>l.tipo==='Entrada').reduce((s,l)=>s+Number(l.valor),0);
+  const saidas   = lancamentos.filter(l=>l.tipo==='Saída').reduce((s,l)=>s+Number(l.valor),0);
+  const saldo = entradas-saidas;
+  document.getElementById('d-saldo').textContent=fmtBRL(saldo);
+  document.getElementById('d-saldo').className='metric-value '+(saldo>=0?'verde':'vermelho');
+  document.getElementById('d-entradas').textContent=fmtBRL(entradas);
+  document.getElementById('d-saidas').textContent=fmtBRL(saidas);
+  function renderBars(tipo,containerId,cor) {
+    const agrup={};
+    lancamentos.filter(l=>l.tipo===tipo).forEach(l=>{ agrup[l.conta_nome]=(agrup[l.conta_nome]||0)+Number(l.valor); });
+    const el=document.getElementById(containerId);
+    const entries=Object.entries(agrup).sort((a,b)=>b[1]-a[1]);
+    if(!entries.length) { el.innerHTML='<div class="empty">Nenhum lançamento ainda</div>'; return; }
+    const max=Math.max(...entries.map(e=>e[1]));
+    el.innerHTML=entries.map(([nome,val])=>
+      `<div class="bar-row"><div class="bar-label" title="${nome}">${nome}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(val/max*100)}%;background:${cor};"></div></div><div class="bar-val">${fmtBRL(val)}</div></div>`
+    ).join('');
+  }
+  renderBars('Entrada','chart-e','#1D9E75');
+  renderBars('Saída','chart-s','#E24B4A');
+  const recEl=document.getElementById('d-recentes');
+  const rec=lancamentos.slice(0,6);
+  if(!rec.length) { recEl.innerHTML='<div class="empty">Nenhum lançamento ainda</div>'; return; }
+  let html='<div class="table-wrap"><table><thead><tr><th>Data</th><th>Descrição</th><th>Conta</th><th style="text-align:right">Valor</th></tr></thead><tbody>';
+  rec.forEach(l=>{
+    const cls=l.tipo==='Entrada'?'valor-entrada':'valor-saida';
+    const sinal=l.tipo==='Entrada'?'+':'−';
+    html+=`<tr><td style="color:var(--text-muted)">${fmtData(l.data)}</td><td>${l.descricao}</td><td><span class="tag ${l.tipo==='Entrada'?'tag-receita':'tag-despesa'}">${l.conta_nome}</span></td><td class="${cls}" style="text-align:right">${sinal} ${fmtBRL(l.valor)}</td></tr>`;
+  });
+  html+='</tbody></table></div>';
+  recEl.innerHTML=html;
+}
+
+// ── Init ──────────────────────────────────────────────────────
+(async () => {
+  await verificarHash();
+  const { data } = await sb.auth.getSession();
+  if(data.session && !window.location.hash.includes('type=')) {
+    entrarNoApp(data.session.user);
+  }
+})();
+</script>
+</body>
+</html>
